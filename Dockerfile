@@ -28,7 +28,7 @@ COPY --from=builder /root/.local /home/appuser/.local
 # Set PATH for user packages
 ENV PATH=/home/appuser/.local/bin:$PATH
 
-# Copy application code
+# Copy application code and knowledge base
 COPY --chown=appuser:appuser app/ ./app/
 COPY --chown=appuser:appuser scripts/ ./scripts/
 
@@ -37,6 +37,12 @@ RUN mkdir -p chromadb && chown -R appuser:appuser chromadb
 
 # Switch to non-root user
 USER appuser
+
+# Run document ingestion (requires OPENAI_API_KEY at build time for embeddings)
+# If no API key, ChromaDB will use default embeddings
+ARG OPENAI_API_KEY=""
+ENV OPENAI_API_KEY=${OPENAI_API_KEY}
+RUN python scripts/ingest.py || echo "Ingestion skipped (no API key or error)"
 
 # Expose port
 EXPOSE 8000

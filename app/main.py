@@ -1,6 +1,13 @@
 """
 FastAPI Application Entry Point
-Portfolio AI Backend with RAG-powered chatbot capabilities.
+Portfolio AI Backend with advanced RAG-powered chatbot capabilities.
+
+Features:
+- LLM-based intent classification
+- Hybrid retrieval (semantic + keyword search)
+- LLM reranking for relevance
+- Token management and cost tracking
+- Streaming responses
 """
 
 import logging
@@ -11,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
-from app.routers import chat, detail, health
+from app.routers import chat_v2 as chat, detail, health
 
 # Configure logging
 logging.basicConfig(
@@ -28,21 +35,26 @@ async def lifespan(app: FastAPI):
     logger.info(f"Starting {settings.app_name} v{settings.app_version}")
     logger.info(f"Environment: {settings.app_env}")
     logger.info(f"Debug mode: {settings.debug}")
+    logger.info("GenAI Features: LLM Intent Classification, Hybrid Retrieval, Reranking, Token Tracking")
 
-    # Initialize services
+    # Initialize hybrid retriever
     try:
-        from app.services.retriever import PortfolioRetriever
-
-        app.state.retriever = PortfolioRetriever()
-        logger.info("Retriever initialized successfully")
+        from app.services.hybrid_retriever import HybridRetriever
+        app.state.hybrid_retriever = HybridRetriever()
+        logger.info("HybridRetriever initialized successfully")
     except Exception as e:
-        logger.warning(f"Retriever initialization failed: {e}")
-        app.state.retriever = None
+        logger.warning(f"HybridRetriever initialization failed: {e}")
+        app.state.hybrid_retriever = None
 
     yield
 
     # Shutdown
     logger.info("Shutting down application")
+    
+    # Log final token stats
+    from app.services.token_tracker import token_tracker
+    stats = token_tracker.get_total_stats()
+    logger.info(f"Session stats - Total tokens: {stats['total_tokens']}, Cost: ${stats['total_cost']:.4f}")
 
 
 # Create FastAPI application
@@ -54,6 +66,11 @@ app = FastAPI(
     redoc_url="/redoc" if settings.debug else None,
     lifespan=lifespan,
 )
+
+# Rate Limiting Middleware (add before CORS)
+from app.middleware import RateLimitMiddleware
+
+app.add_middleware(RateLimitMiddleware)
 
 # CORS Middleware
 app.add_middleware(

@@ -54,7 +54,7 @@ async def process_batch(prompts: list[str]) -> list[str]:
     return results''',
             "explanation": "This uses asyncio.Semaphore to limit concurrent API calls. Even with 100 items to process, only MAX_CONCURRENT calls happen simultaneously. This prevents hitting OpenAI's rate limits (3 RPM on free tier).",
             "links": {
-                "github": "https://github.com/deepanshu-malik/genai-sandbox/blob/master/05_rate_limiting.py"
+                "github": "https://github.com/deepanshu-malik/genai-sandbox/blob/main/05_rate_limiting.py"
             },
         },
         "rag_pipeline": {
@@ -112,7 +112,7 @@ class RAGPipeline:
         return [e.embedding for e in response.data]''',
             "explanation": "Full RAG implementation: Load documents, generate embeddings, store in ChromaDB, retrieve relevant chunks on query, and generate augmented responses. Uses ChromaDB for simplicity and text-embedding-3-small for cost-effective embeddings.",
             "links": {
-                "github": "https://github.com/deepanshu-malik/genai-sandbox/blob/master/rag/04_complete_rag_pipeline.py"
+                "github": "https://github.com/deepanshu-malik/genai-sandbox/blob/main/rag/04_complete_rag_pipeline.py"
             },
         },
         "chunking": {
@@ -155,7 +155,7 @@ def paragraph_chunk(text: str) -> list[str]:
 # Paragraph: Best semantic units, may be too large''',
             "explanation": "Three chunking strategies with different trade-offs. Simple chunking is fast but may break mid-sentence. Sentence chunking preserves meaning but has variable sizes. Paragraph chunking preserves semantic units and is best for Q&A.",
             "links": {
-                "github": "https://github.com/deepanshu-malik/genai-sandbox/blob/master/rag/02_chunking_strategies.py"
+                "github": "https://github.com/deepanshu-malik/genai-sandbox/blob/main/rag/02_chunking_strategies.py"
             },
         },
         "async_calls": {
@@ -187,7 +187,7 @@ async def process_batch(prompts: list[str]) -> list[str]:
 # Result: 5-10x faster for batch operations''',
             "explanation": "Use AsyncOpenAI client for concurrent API calls. asyncio.gather() runs all tasks simultaneously, achieving 5-10x faster batch processing. Combine with rate limiting for production use.",
             "links": {
-                "github": "https://github.com/deepanshu-malik/genai-sandbox/blob/master/04_async_calls.py"
+                "github": "https://github.com/deepanshu-malik/genai-sandbox/blob/main/04_async_calls.py"
             },
         },
     }

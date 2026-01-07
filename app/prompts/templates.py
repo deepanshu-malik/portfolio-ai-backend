@@ -39,21 +39,25 @@ def format_context(retrieved_docs: List[Dict[str, Any]]) -> str:
 
 
 # Suggestion templates by intent
+# Actions:
+#   code: fetches from CodeHandler (rate_limiting, rag_pipeline, chunking, async_calls)
+#   deepdive: sends chat message "Tell me more about {target}"
+#   compare: fetches from CodeHandler (rag_vs_backend, chunking_strategies)
 SUGGESTION_TEMPLATES = {
     "quick_answer": [
-        {"label": "Tell me more", "action": "deepdive", "target": "more_details"},
-        {"label": "See projects", "action": "deepdive", "target": "projects"},
+        {"label": "Tell me about your projects", "action": "deepdive", "target": "your projects"},
+        {"label": "What's your experience?", "action": "deepdive", "target": "your work experience"},
     ],
     "project_deepdive": [
-        {"label": "Show Code", "action": "code", "target": "rag_pipeline"},
-        {"label": "Architecture", "action": "deepdive", "target": "rag_architecture"},
-        {"label": "Challenges", "action": "deepdive", "target": "rag_challenges"},
+        {"label": "Show RAG Code", "action": "code", "target": "rag_pipeline"},
+        {"label": "Architecture Details", "action": "deepdive", "target": "the architecture"},
+        {"label": "Challenges Faced", "action": "deepdive", "target": "challenges you faced"},
         {"label": "Compare Projects", "action": "compare", "target": "rag_vs_backend"},
     ],
     "experience_deepdive": [
-        {"label": "Key Achievements", "action": "deepdive", "target": "achievements"},
-        {"label": "Tech Stack Used", "action": "deepdive", "target": "tech_stack"},
-        {"label": "Team & Mentorship", "action": "deepdive", "target": "mentorship"},
+        {"label": "Key Achievements", "action": "deepdive", "target": "your key achievements"},
+        {"label": "Tech Stack Used", "action": "deepdive", "target": "technologies you used"},
+        {"label": "Team & Mentorship", "action": "deepdive", "target": "team collaboration and mentorship"},
     ],
     "code_walkthrough": [
         {"label": "Rate Limiting", "action": "code", "target": "rate_limiting"},
@@ -62,25 +66,25 @@ SUGGESTION_TEMPLATES = {
         {"label": "Async Calls", "action": "code", "target": "async_calls"},
     ],
     "skill_assessment": [
-        {"label": "GenAI Fit", "action": "deepdive", "target": "genai_fit"},
-        {"label": "Backend Fit", "action": "deepdive", "target": "backend_fit"},
-        {"label": "See Projects", "action": "deepdive", "target": "projects"},
+        {"label": "GenAI Experience", "action": "deepdive", "target": "your GenAI experience"},
+        {"label": "Backend Skills", "action": "deepdive", "target": "your backend skills"},
+        {"label": "See Projects", "action": "deepdive", "target": "projects demonstrating these skills"},
     ],
     "comparison": [
         {"label": "RAG vs Backend", "action": "compare", "target": "rag_vs_backend"},
         {"label": "Chunking Strategies", "action": "compare", "target": "chunking_strategies"},
     ],
     "tour": [
-        {"label": "Skills", "action": "deepdive", "target": "skills"},
-        {"label": "Projects", "action": "deepdive", "target": "projects"},
-        {"label": "Experience", "action": "deepdive", "target": "experience"},
-        {"label": "Contact", "action": "deepdive", "target": "contact"},
+        {"label": "Your Skills", "action": "deepdive", "target": "your technical skills"},
+        {"label": "Projects", "action": "deepdive", "target": "your projects"},
+        {"label": "Work Experience", "action": "deepdive", "target": "your work experience"},
+        {"label": "Contact Info", "action": "deepdive", "target": "how to contact you"},
     ],
     "general": [
-        {"label": "About Me", "action": "deepdive", "target": "about"},
-        {"label": "See Skills", "action": "deepdive", "target": "skills"},
-        {"label": "View Projects", "action": "deepdive", "target": "projects"},
-        {"label": "Experience", "action": "deepdive", "target": "experience"},
+        {"label": "About You", "action": "deepdive", "target": "yourself"},
+        {"label": "Your Skills", "action": "deepdive", "target": "your skills"},
+        {"label": "Projects", "action": "deepdive", "target": "your projects"},
+        {"label": "Experience", "action": "deepdive", "target": "your work experience"},
     ],
 }
 

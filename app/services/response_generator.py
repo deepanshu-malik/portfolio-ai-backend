@@ -1,9 +1,10 @@
 """Response generation service using OpenAI API."""
 
+import asyncio
 import logging
 from typing import Any, Dict, List, Optional
 
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, APIError, RateLimitError, APIConnectionError
 
 from app.config import settings
 from app.models import Suggestion
@@ -11,6 +12,9 @@ from app.prompts.system_prompts import get_system_prompt
 from app.prompts.templates import format_context, get_suggestion_templates
 
 logger = logging.getLogger(__name__)
+
+MAX_RETRIES = 3
+RETRY_DELAYS = [1, 2, 4]  # Exponential backoff
 
 
 class ResponseGenerator:
@@ -22,6 +26,7 @@ class ResponseGenerator:
     - Context injection from retrieved documents
     - Suggestion generation
     - Conversation history handling
+    - Retry logic with exponential backoff
     """
 
     def __init__(self):
@@ -78,15 +83,8 @@ class ResponseGenerator:
             # Add current query
             messages.append({"role": "user", "content": query})
 
-            # Generate response
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=0.7,
-                max_tokens=800,
-            )
-
-            response_text = response.choices[0].message.content
+            # Generate response with retry logic
+            response_text = await self._call_openai_with_retry(messages)
 
             # Generate suggestions based on intent and response
             suggestions = self._generate_suggestions(intent, query, response_text)
@@ -107,6 +105,35 @@ class ResponseGenerator:
                 "suggestions": [],
                 "detail_panel": None,
             }
+
+    async def _call_openai_with_retry(self, messages: List[Dict]) -> str:
+        """Call OpenAI API with exponential backoff retry."""
+        last_error = None
+
+        for attempt in range(MAX_RETRIES):
+            try:
+                response = await self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    temperature=0.7,
+                    max_tokens=800,
+                )
+                return response.choices[0].message.content
+
+            except RateLimitError as e:
+                last_error = e
+                delay = RETRY_DELAYS[attempt] if attempt < len(RETRY_DELAYS) else RETRY_DELAYS[-1]
+                logger.warning(f"Rate limited, retrying in {delay}s (attempt {attempt + 1}/{MAX_RETRIES})")
+                await asyncio.sleep(delay)
+
+            except (APIError, APIConnectionError) as e:
+                last_error = e
+                delay = RETRY_DELAYS[attempt] if attempt < len(RETRY_DELAYS) else RETRY_DELAYS[-1]
+                logger.warning(f"API error: {e}, retrying in {delay}s (attempt {attempt + 1}/{MAX_RETRIES})")
+                await asyncio.sleep(delay)
+
+        logger.error(f"All retries failed: {last_error}")
+        raise last_error
 
     def _generate_suggestions(
         self,

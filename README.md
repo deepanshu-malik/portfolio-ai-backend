@@ -1,19 +1,67 @@
 # Portfolio AI Backend
 
-AI-powered portfolio assistant with RAG capabilities for Deepanshu Malik's portfolio website.
+Production-grade AI-powered portfolio assistant showcasing advanced GenAI/RAG engineering skills.
 
-## Features
+## 🚀 GenAI Features
 
-- **RAG-powered Chat**: Answers questions about experience, projects, and skills using retrieval-augmented generation
-- **Intent Classification**: Understands user intent (quick answer, deep dive, code walkthrough, etc.)
-- **Code Snippets**: Returns syntax-highlighted code examples from projects
-- **Session Management**: Maintains conversation context across multiple exchanges
+| Feature | Description |
+|---------|-------------|
+| **LLM Intent Classification** | Uses gpt-4o-mini for accurate intent understanding (8 intents) |
+| **Hybrid Retrieval** | Combines semantic search + keyword matching (BM25-like) |
+| **Query Expansion** | Intent-aware query rewriting for better recall |
+| **LLM Reranking** | Reorders retrieved docs by relevance using LLM |
+| **Token Management** | Smart context truncation with tiktoken |
+| **Cost Tracking** | Per-request and session token/cost monitoring |
+| **Streaming Responses** | Server-Sent Events for real-time UX |
+| **Relevance Filtering** | Threshold-based filtering to remove low-quality matches |
+
+## Architecture
+
+```
+User Query
+    │
+    ▼
+┌─────────────────────────────────────┐
+│  LLM Intent Classification          │ ← gpt-4o-mini
+│  (context-aware, fallback to regex) │
+└─────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────┐
+│  Hybrid Retrieval                   │
+│  ├─ Query expansion by intent       │
+│  ├─ OpenAI embeddings               │
+│  ├─ Semantic search (ChromaDB)      │
+│  ├─ Keyword search (BM25-like)      │
+│  └─ Relevance threshold filtering   │
+└─────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────┐
+│  LLM Reranking                      │ ← gpt-4o-mini
+│  (reorders by query relevance)      │
+└─────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────┐
+│  Response Generation                │ ← gpt-4o-mini
+│  ├─ Token-managed context           │
+│  ├─ Intent-specific prompts         │
+│  ├─ Conversation history            │
+│  └─ Streaming support               │
+└─────────────────────────────────────┘
+    │
+    ▼
+Response + Suggestions + Token Stats
+```
 
 ## Tech Stack
 
-- **Framework**: FastAPI
+- **Framework**: FastAPI (async)
 - **LLM**: OpenAI API (gpt-4o-mini)
-- **Vector Database**: ChromaDB
+- **Embeddings**: text-embedding-3-small
+- **Vector Database**: ChromaDB (persistent)
+- **Token Counting**: tiktoken
 - **Language**: Python 3.11+
 
 ## Project Structure
@@ -21,84 +69,50 @@ AI-powered portfolio assistant with RAG capabilities for Deepanshu Malik's portf
 ```
 portfolio-ai-backend/
 ├── app/
-│   ├── main.py                 # FastAPI entry point
-│   ├── config.py               # Configuration settings
-│   ├── routers/                # API endpoints
-│   │   ├── chat.py             # POST /api/chat
-│   │   ├── detail.py           # POST /api/detail
-│   │   └── health.py           # GET /api/health
-│   ├── services/               # Business logic
-│   │   ├── intent_classifier.py
-│   │   ├── retriever.py
-│   │   ├── response_generator.py
-│   │   ├── code_handler.py
-│   │   └── session_manager.py
-│   ├── prompts/                # LLM prompts
-│   │   ├── system_prompts.py
-│   │   └── templates.py
-│   ├── models/                 # Pydantic models
-│   │   ├── chat.py
-│   │   └── responses.py
+│   ├── main.py                          # FastAPI entry point
+│   ├── config.py                        # Pydantic settings
+│   ├── routers/
+│   │   ├── chat_v2.py                   # Advanced chat endpoints
+│   │   ├── detail.py                    # Code snippets & comparisons
+│   │   └── health.py                    # Health checks with stats
+│   ├── services/
+│   │   ├── llm_intent_classifier.py     # LLM-based intent classification
+│   │   ├── hybrid_retriever.py          # Hybrid search + reranking
+│   │   ├── advanced_response_generator.py # Token-managed generation
+│   │   ├── token_tracker.py             # Usage & cost tracking
+│   │   ├── intent_classifier.py         # Regex fallback classifier
+│   │   ├── retriever.py                 # Basic retriever (legacy)
+│   │   ├── response_generator.py        # Basic generator (legacy)
+│   │   ├── code_handler.py              # Code snippets handler
+│   │   └── session_manager.py           # Conversation sessions
+│   ├── prompts/
+│   │   ├── system_prompts.py            # Intent-specific prompts
+│   │   └── templates.py                 # Response templates
+│   ├── models/                          # Pydantic models
+│   ├── middleware/
+│   │   └── rate_limit.py                # In-memory rate limiting
 │   └── data/
-│       └── knowledge_base/     # RAG source documents
+│       └── knowledge_base/              # RAG source documents
+│           ├── profile/
+│           ├── projects/
+│           ├── experience/
+│           ├── skills/
+│           ├── code_snippets/
+│           └── assessments/
 ├── scripts/
-│   └── ingest.py               # Document ingestion script
-├── chromadb/                   # Vector database storage
+│   └── ingest.py                        # Document ingestion to ChromaDB
+├── chromadb/                            # Vector database storage
 ├── requirements.txt
 ├── Dockerfile
-├── render.yaml                 # Render deployment config
 └── README.md
 ```
 
-## Setup
-
-### Prerequisites
-
-- Python 3.11+
-- OpenAI API key
-
-### Installation
-
-1. Clone the repository:
-```bash
-git clone https://github.com/deepanshu-malik/portfolio-ai-backend.git
-cd portfolio-ai-backend
-```
-
-2. Create virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-4. Set up environment variables:
-```bash
-cp .env.example .env
-# Edit .env and add your OPENAI_API_KEY
-```
-
-5. Ingest documents to ChromaDB:
-```bash
-python scripts/ingest.py
-```
-
-6. Run the server:
-```bash
-uvicorn app.main:app --reload
-```
-
-The API will be available at `http://localhost:8000`
-
 ## API Endpoints
 
-### POST /api/chat
+### Chat
 
-Send a chat message and receive an AI-generated response.
+#### POST /api/chat
+Main chat endpoint with full GenAI pipeline.
 
 **Request:**
 ```json
@@ -117,49 +131,113 @@ Send a chat message and receive an AI-generated response.
 {
   "response": "I've built a production-ready RAG pipeline...",
   "suggestions": [
-    {"label": "Show Code", "action": "code", "target": "rag_pipeline"}
+    {"label": "Show RAG Code", "action": "code", "target": "rag_pipeline"}
   ],
-  "detail_panel": null,
   "intent": "project_deepdive",
   "session_id": "session_123"
 }
 ```
 
-### POST /api/detail
+#### POST /api/chat/stream
+Streaming chat responses (Server-Sent Events).
 
-Fetch detailed content like code snippets or comparisons.
+#### GET /api/chat/stats
+Token usage and cost statistics.
 
-**Request:**
+**Response:**
 ```json
 {
-  "action": "code",
-  "target": "rate_limiting",
-  "session_id": "session_123"
+  "total_tokens": 15420,
+  "prompt_tokens": 12000,
+  "completion_tokens": 3420,
+  "total_cost": 0.0045,
+  "request_count": 12,
+  "by_type": {
+    "chat": {"tokens": 14000, "cost": 0.004, "count": 10},
+    "intent": {"tokens": 1420, "cost": 0.0005, "count": 10}
+  }
 }
 ```
 
-### GET /api/health
+### Detail
 
-Health check endpoint.
+#### POST /api/detail
+Fetch code snippets, deep dives, or comparisons.
+
+### Health
+
+#### GET /api/health
+Basic health check.
+
+#### GET /api/health/detailed
+Detailed health with feature status and token stats.
 
 **Response:**
 ```json
 {
   "status": "healthy",
   "version": "1.0.0",
-  "chromadb": "connected"
+  "features": {
+    "llm_intent_classification": true,
+    "hybrid_retrieval": true,
+    "llm_reranking": true,
+    "token_tracking": true,
+    "streaming": true
+  },
+  "models": {
+    "chat": "gpt-4o-mini",
+    "embedding": "text-embedding-3-small"
+  },
+  "chromadb": {
+    "status": "connected",
+    "document_count": 25
+  },
+  "token_usage": {...}
 }
 ```
 
+## Setup
+
+### Prerequisites
+- Python 3.11+
+- OpenAI API key
+
+### Installation
+
+```bash
+# Clone repository
+git clone https://github.com/deepanshu-malik/portfolio-ai-backend.git
+cd portfolio-ai-backend
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Set environment variables
+cp .env.example .env
+# Edit .env and add OPENAI_API_KEY
+
+# Ingest documents to ChromaDB
+python scripts/ingest.py
+
+# Run server
+uvicorn app.main:app --reload
+```
+
+API available at `http://localhost:8000`
+
 ## Deployment
 
-### Render (Recommended)
+### Koyeb (Recommended - Always On)
 
 1. Push code to GitHub
-2. Connect repository to Render
-3. Set environment variables in Render dashboard:
-   - `OPENAI_API_KEY`: Your OpenAI API key
-4. Deploy!
+2. Connect repository in Koyeb
+3. Select **Dockerfile** build
+4. Set environment variable: `OPENAI_API_KEY`
+5. Port: `8000`
 
 ### Docker
 
@@ -168,26 +246,28 @@ docker build -t portfolio-backend .
 docker run -p 8000:8000 -e OPENAI_API_KEY=your_key portfolio-backend
 ```
 
-## Development
+## GenAI Skills Demonstrated
 
-### Running Tests
+- ✅ **Prompt Engineering** - Intent-specific system prompts, LLM classification
+- ✅ **RAG Pipeline** - End-to-end retrieval augmented generation
+- ✅ **Hybrid Search** - Combining semantic and keyword search
+- ✅ **Reranking** - LLM-based relevance reordering
+- ✅ **Token Management** - Context window optimization with tiktoken
+- ✅ **Cost Tracking** - Production-ready usage monitoring
+- ✅ **Streaming** - Real-time response generation
+- ✅ **Error Handling** - Retries, fallbacks, graceful degradation
 
-```bash
-pytest tests/
-```
+## Configuration
 
-### Code Formatting
-
-```bash
-black app/
-ruff check app/
-```
-
-### Type Checking
-
-```bash
-mypy app/
-```
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OPENAI_API_KEY` | - | Required. OpenAI API key |
+| `OPENAI_MODEL` | gpt-4o-mini | Chat model |
+| `OPENAI_EMBEDDING_MODEL` | text-embedding-3-small | Embedding model |
+| `CHROMA_PERSIST_DIRECTORY` | ./chromadb | Vector DB path |
+| `RATE_LIMIT_REQUESTS` | 10 | Requests per window |
+| `RATE_LIMIT_WINDOW` | 60 | Window in seconds |
+| `DEBUG` | false | Enable debug mode |
 
 ## License
 

@@ -58,12 +58,9 @@ class PortfolioRetriever:
             persist_dir = Path(settings.chroma_persist_directory)
             persist_dir.mkdir(parents=True, exist_ok=True)
 
-            self.client = chromadb.Client(
-                Settings(
-                    chroma_db_impl="duckdb+parquet",
-                    persist_directory=str(persist_dir),
-                    anonymized_telemetry=False,
-                )
+            self.client = chromadb.PersistentClient(
+                path=str(persist_dir),
+                settings=Settings(anonymized_telemetry=False),
             )
 
             # Get or create collection

@@ -18,6 +18,8 @@ import chromadb
 from chromadb.config import Settings
 from openai import OpenAI
 
+from app.config import settings
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -152,15 +154,12 @@ def ingest_to_chromadb(
     # Create ChromaDB client
     CHROMA_PERSIST_DIR.mkdir(parents=True, exist_ok=True)
 
-    client = chromadb.Client(
-        Settings(
-            chroma_db_impl="duckdb+parquet",
-            persist_directory=str(CHROMA_PERSIST_DIR),
-            anonymized_telemetry=False,
-        )
+    client = chromadb.PersistentClient(
+        path=str(CHROMA_PERSIST_DIR),
+        settings=Settings(anonymized_telemetry=False),
     )
 
-    # Get or create collection
+    # Get or create collection - delete existing to refresh
     try:
         client.delete_collection(COLLECTION_NAME)
         logger.info(f"Deleted existing collection: {COLLECTION_NAME}")
@@ -199,7 +198,7 @@ def ingest_to_chromadb(
             for i in range(0, len(documents), batch_size):
                 batch = documents[i : i + batch_size]
                 response = openai_client.embeddings.create(
-                    model="text-embedding-3-small",
+                    model=settings.openai_embedding_model,
                     input=batch,
                 )
                 batch_embeddings = [e.embedding for e in response.data]
@@ -227,9 +226,6 @@ def ingest_to_chromadb(
             metadatas=metadatas,
             ids=ids,
         )
-
-    # Persist
-    client.persist()
 
     logger.info(f"Ingested {len(documents)} chunks into ChromaDB")
 
