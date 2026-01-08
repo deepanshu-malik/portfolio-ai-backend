@@ -2,7 +2,7 @@
 
 from typing import Any, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ChatContext(BaseModel):
@@ -30,8 +30,17 @@ class ChatRequest(BaseModel):
     session_id: str = Field(
         ...,
         min_length=1,
+        max_length=100,
         description="Unique session identifier",
     )
+
+    @field_validator("message")
+    @classmethod
+    def message_not_empty(cls, v: str) -> str:
+        """Validate message is not just whitespace."""
+        if not v.strip():
+            raise ValueError("Message cannot be empty or whitespace only")
+        return v
     context: Optional[ChatContext] = Field(
         None,
         description="Additional context for the conversation",
@@ -87,6 +96,10 @@ class ChatResponse(BaseModel):
         description="Detected intent of the user's message",
     )
     session_id: str = Field(..., description="Session identifier")
+    sources: List[str] = Field(
+        default_factory=list,
+        description="Source documents used for the response",
+    )
 
     class Config:
         json_schema_extra = {

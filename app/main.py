@@ -19,6 +19,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.routers import chat_v2 as chat, detail, health
+from app.routers import chat_v2_langchain
 
 # Configure logging
 logging.basicConfig(
@@ -37,14 +38,15 @@ async def lifespan(app: FastAPI):
     logger.info(f"Debug mode: {settings.debug}")
     logger.info("GenAI Features: LLM Intent Classification, Hybrid Retrieval, Reranking, Token Tracking")
 
-    # Initialize hybrid retriever
-    try:
-        from app.services.hybrid_retriever import HybridRetriever
-        app.state.hybrid_retriever = HybridRetriever()
-        logger.info("HybridRetriever initialized successfully")
-    except Exception as e:
-        logger.warning(f"HybridRetriever initialization failed: {e}")
-        app.state.hybrid_retriever = None
+    # Note: HybridRetriever initialization disabled to avoid ChromaDB conflicts
+    # The LangChain-based retriever is used instead
+    # try:
+    #     from app.services.hybrid_retriever import HybridRetriever
+    #     app.state.hybrid_retriever = HybridRetriever()
+    #     logger.info("HybridRetriever initialized successfully")
+    # except Exception as e:
+    #     logger.warning(f"HybridRetriever initialization failed: {e}")
+    #     app.state.hybrid_retriever = None
 
     yield
 
@@ -110,6 +112,7 @@ async def log_requests(request: Request, call_next):
 app.include_router(health.router, prefix="/api", tags=["Health"])
 app.include_router(chat.router, prefix="/api", tags=["Chat"])
 app.include_router(detail.router, prefix="/api", tags=["Detail"])
+app.include_router(chat_v2_langchain.router, tags=["Chat-LangChain"])
 
 
 # Root endpoint

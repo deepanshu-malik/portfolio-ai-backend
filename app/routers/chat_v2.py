@@ -65,12 +65,14 @@ async def chat(request: Request, chat_request: ChatRequest) -> ChatResponse:
                 "previous_topic": context.previous_topic if context else None,
                 "history": history,
             },
+            session_id=session_id,
         )
         logger.info(f"Classified intent: {intent}")
 
         # 2. Hybrid retrieval with reranking
         retriever = get_retriever(request)
         retrieved_docs = []
+        sources = []
         
         if retriever:
             try:
@@ -80,6 +82,8 @@ async def chat(request: Request, chat_request: ChatRequest) -> ChatResponse:
                     use_reranking=True,
                 )
                 logger.info(f"Retrieved {len(retrieved_docs)} documents")
+                # Extract sources from retrieved documents
+                sources = [doc["metadata"].get("source", "") for doc in retrieved_docs if doc.get("metadata")]
             except Exception as e:
                 logger.warning(f"Retrieval failed: {e}")
 
@@ -103,6 +107,9 @@ async def chat(request: Request, chat_request: ChatRequest) -> ChatResponse:
         # Log token usage
         if "token_usage" in response_data:
             logger.info(f"Token usage: {response_data['token_usage']}")
+        
+        logger.info(f"Response data keys: {response_data.keys()}")
+        logger.info(f"Suggestions: {response_data.get('suggestions')}")
 
         return ChatResponse(
             response=response_data["response"],
@@ -110,6 +117,7 @@ async def chat(request: Request, chat_request: ChatRequest) -> ChatResponse:
             detail_panel=response_data.get("detail_panel"),
             intent=intent,
             session_id=session_id,
+            sources=sources,
         )
 
     except Exception as e:
@@ -143,6 +151,7 @@ async def chat_stream(request: Request, chat_request: ChatRequest):
                 "current_section": context.current_section if context else None,
                 "previous_topic": context.previous_topic if context else None,
             },
+            session_id=session_id,
         )
 
         # Retrieve documents
@@ -150,11 +159,14 @@ async def chat_stream(request: Request, chat_request: ChatRequest):
         retrieved_docs = []
         
         if retriever:
-            retrieved_docs = await retriever.retrieve(
-                query=message,
-                intent=intent,
-                use_reranking=False,  # Skip reranking for speed in streaming
-            )
+            try:
+                retrieved_docs = await retriever.retrieve(
+                    query=message,
+                    intent=intent,
+                    use_reranking=False,  # Skip reranking for speed in streaming
+                )
+            except Exception as e:
+                logger.warning(f"Retrieval failed in stream: {e}")
 
         # Stream response
         async def generate():
@@ -164,6 +176,7 @@ async def chat_stream(request: Request, chat_request: ChatRequest):
                 intent=intent,
                 retrieved_docs=retrieved_docs,
                 history=history,
+                session_id=session_id,
             ):
                 full_response += chunk
                 yield f"data: {chunk}\n\n"

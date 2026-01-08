@@ -294,6 +294,7 @@ class AdvancedResponseGenerator:
         intent: str,
         retrieved_docs: List[Dict[str, Any]],
         history: Optional[List[Dict[str, str]]] = None,
+        session_id: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         """
         Generate streaming response.
@@ -318,6 +319,7 @@ class AdvancedResponseGenerator:
 
         messages.append({"role": "user", "content": query})
 
+        full_response = ""
         try:
             stream = await self.client.chat.completions.create(
                 model=self.model,
@@ -329,7 +331,20 @@ class AdvancedResponseGenerator:
 
             async for chunk in stream:
                 if chunk.choices[0].delta.content:
-                    yield chunk.choices[0].delta.content
+                    content = chunk.choices[0].delta.content
+                    full_response += content
+                    yield content
+
+            # Track tokens after streaming completes
+            input_tokens = sum(self.count_tokens(m["content"]) for m in messages)
+            output_tokens = self.count_tokens(full_response)
+            token_tracker.track(
+                prompt_tokens=input_tokens,
+                completion_tokens=output_tokens,
+                model=self.model,
+                request_type="chat_stream",
+                session_id=session_id,
+            )
 
         except Exception as e:
             logger.error(f"Stream generation error: {e}")

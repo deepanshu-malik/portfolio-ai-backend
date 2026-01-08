@@ -1,55 +1,37 @@
-# genai-sandbox Project
+# GenAI Sandbox - Learning Lab
 
 ## Overview
-Personal GenAI learning lab with production-ready implementations.
+Personal learning project for exploring GenAI/LLM development patterns. Hands-on experiments with OpenAI API, embeddings, and RAG fundamentals.
+
 Repository: https://github.com/deepanshu-malik/genai-sandbox
 
-## Components
+## Key Learnings
 
-### LLM API Basics (Session 1)
-- First LLM API call with cost tracking
+### LLM API Patterns
 - Streaming responses for better UX
-- Production patterns: error handling, retries, token limits
-- Async calls for concurrent processing
-- Semaphore-based rate limiting for batch operations
+- Async calls for 5-10x faster batch processing
+- Semaphore-based rate limiting for API limits
+- Token counting and cost tracking (~$0.000015 per simple call)
+- Production patterns: retries, error handling, timeouts
 
-### RAG System (Session 2)
+### RAG Fundamentals
 - Text embeddings and cosine similarity
-- Document chunking strategies (simple, sentence, paragraph)
-- ChromaDB for persistent vector storage with metadata filtering
-- Complete RAG pipeline: retrieval + augmented prompts + generation
-- Document Q&A CLI tool with semantic search and citations
+- Document chunking strategies:
+  - **Simple**: Fixed character count (fast, may break sentences)
+  - **Sentence**: Split on boundaries (preserves meaning)
+  - **Paragraph**: Semantic units (best for Q&A)
+- ChromaDB for vector storage with metadata filtering
+- Complete retrieval → augmentation → generation pipeline
+
+### Document Q&A Tool
+Built a CLI tool demonstrating:
+- Semantic search over documents
+- Citation support in responses
+- Configurable chunking strategies
 
 ## Tech Stack
-- Python
-- OpenAI API (gpt-4o-mini)
-- ChromaDB
-- asyncio
+- Python, OpenAI API (gpt-4o-mini)
+- ChromaDB, asyncio
 
-## Key Learnings
-- gpt-4o-mini costs ~$0.000015 per simple call
-- Always track tokens and costs
-- Production code needs: error handling, retries, token limits
-- Streaming improves UX but delays token counts
-- Async calls enable 5x-10x faster batch processing
-
-## Architecture Decisions
-
-### Rate Limiting
-Used semaphore-based approach because OpenAI free tier has 3 RPM limit.
-MAX_CONCURRENT = 2 prevents rate limit errors while maximizing throughput.
-
-### Chunking Strategy
-Implemented three strategies:
-1. Simple: Fixed character count (fast, may break sentences)
-2. Sentence: Split on boundaries (preserves meaning, variable size)
-3. Paragraph: Semantic units (best for Q&A, larger chunks)
-
-Chose paragraph chunking for Document Q&A tool because it preserves context better for question answering.
-
-### Vector Database Choice
-Selected ChromaDB because:
-- Easy local setup (no external service needed)
-- Persistent storage
-- Metadata filtering support
-- Good for learning and prototyping
+## Why This Matters
+These experiments directly informed the architecture of my production RAG system (Portfolio AI Backend), where I applied these patterns at scale with additional features like hybrid search and LLM reranking.

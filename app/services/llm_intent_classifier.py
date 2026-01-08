@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from openai import AsyncOpenAI
 
 from app.config import settings
+from app.services.token_tracker import token_tracker
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,7 @@ class LLMIntentClassifier:
         self,
         message: str,
         context: Optional[Dict[str, Any]] = None,
+        session_id: Optional[str] = None,
     ) -> str:
         """
         Classify intent using LLM.
@@ -69,6 +71,7 @@ class LLMIntentClassifier:
         Args:
             message: User's message
             context: Optional context with current_section, previous_topic
+            session_id: Optional session ID for token tracking
 
         Returns:
             Classified intent string
@@ -88,6 +91,16 @@ class LLMIntentClassifier:
                 temperature=0,
                 max_tokens=20,
             )
+
+            # Track token usage
+            if response.usage:
+                token_tracker.track(
+                    prompt_tokens=response.usage.prompt_tokens,
+                    completion_tokens=response.usage.completion_tokens,
+                    model=self.model,
+                    request_type="intent",
+                    session_id=session_id,
+                )
 
             intent = response.choices[0].message.content.strip().lower()
             

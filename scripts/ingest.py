@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-Document ingestion script for ChromaDB.
-Loads markdown files from knowledge_base and stores them in ChromaDB.
+Document ingestion script for ChromaDB with enhanced metadata.
+Loads markdown files from knowledge_base and stores them with comprehensive metadata.
 """
 
 import hashlib
 import logging
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -14,11 +15,15 @@ from typing import Dict, List, Tuple
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from dotenv import load_dotenv
 import chromadb
-from chromadb.config import Settings
 from openai import OpenAI
 
 from app.config import settings
+from metadata_config import DOCUMENT_METADATA
+
+# Load environment variables from .env file (for local development)
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(
@@ -43,9 +48,15 @@ CATEGORY_MAP = {
 }
 
 
+def extract_section_from_content(content: str) -> str:
+    """Extract first H2 heading as section name"""
+    match = re.search(r'^##\s+(.+)$', content, re.MULTILINE)
+    return match.group(1) if match else "Overview"
+
+
 def load_documents() -> List[Tuple[str, Dict[str, str]]]:
     """
-    Load all markdown documents from the knowledge base.
+    Load all markdown documents from the knowledge base with enhanced metadata.
 
     Returns:
         List of (content, metadata) tuples
@@ -65,11 +76,47 @@ def load_documents() -> List[Tuple[str, Dict[str, str]]]:
                     logger.warning(f"Empty file: {md_file}")
                     continue
 
+                # Get enhanced metadata from config
+                doc_config = DOCUMENT_METADATA.get(md_file.name, {})
+                
+                # Build base metadata
                 metadata = {
                     "category": category,
-                    "source": md_file.stem,
-                    "filename": md_file.name,
+                    "source": f"{category}/{md_file.name}",
+                    "doc_id": md_file.stem,
                 }
+                
+                # Add enhanced metadata
+                if doc_config:
+                    metadata.update({
+                        "title": doc_config.get("title", md_file.stem),
+                        "subcategory": doc_config.get("subcategory", category),
+                        "content_type": doc_config.get("content_type", "technical"),
+                        "section": doc_config.get("section", extract_section_from_content(content)),
+                        "date_start": doc_config.get("date_start", ""),
+                        "date_end": doc_config.get("date_end", ""),
+                        "recency_score": doc_config.get("recency_score", 0.5),
+                        "company": doc_config.get("company", "personal"),
+                        "technologies": ",".join(doc_config.get("technologies", [])),
+                        "concepts": ",".join(doc_config.get("concepts", [])),
+                        "keywords": ",".join(doc_config.get("keywords", [])),
+                        "question_types": ",".join(doc_config.get("question_types", [])),
+                        "has_code": str(doc_config.get("has_code", False)),
+                        "has_metrics": str(doc_config.get("has_metrics", False)),
+                        "has_architecture": str(doc_config.get("has_architecture", False)),
+                        "detail_level": doc_config.get("detail_level", "medium"),
+                        # Intent relevance scores
+                        "intent_quick_answer": doc_config.get("intent_relevance", {}).get("quick_answer", 0.0),
+                        "intent_project_deepdive": doc_config.get("intent_relevance", {}).get("project_deepdive", 0.0),
+                        "intent_experience_deepdive": doc_config.get("intent_relevance", {}).get("experience_deepdive", 0.0),
+                        "intent_code_walkthrough": doc_config.get("intent_relevance", {}).get("code_walkthrough", 0.0),
+                        "intent_skill_assessment": doc_config.get("intent_relevance", {}).get("skill_assessment", 0.0),
+                        "intent_comparison": doc_config.get("intent_relevance", {}).get("comparison", 0.0),
+                        "intent_tour": doc_config.get("intent_relevance", {}).get("tour", 0.0),
+                        "intent_general": doc_config.get("intent_relevance", {}).get("general", 0.0),
+                    })
+                else:
+                    logger.warning(f"No metadata config for {md_file.name}, using defaults")
 
                 documents.append((content, metadata))
                 logger.info(f"Loaded: {md_file.name} ({category})")
@@ -87,7 +134,7 @@ def chunk_document(
     overlap: int = 100,
 ) -> List[Tuple[str, Dict[str, str]]]:
     """
-    Chunk a document into smaller pieces.
+    Chunk a document into smaller pieces with enhanced metadata.
 
     Uses paragraph-based chunking with fallback to size-based.
 
@@ -115,7 +162,9 @@ def chunk_document(
         if len(current_chunk) + len(para) > chunk_size and current_chunk:
             chunk_metadata = {
                 **metadata,
+                "chunk_id": f"{metadata['doc_id']}_{len(chunks)}",
                 "chunk_index": len(chunks),
+                "total_chunks": 0,  # Will be updated after all chunks created
             }
             chunks.append((current_chunk.strip(), chunk_metadata))
             # Keep some overlap
@@ -127,9 +176,16 @@ def chunk_document(
     if current_chunk.strip():
         chunk_metadata = {
             **metadata,
+            "chunk_id": f"{metadata['doc_id']}_{len(chunks)}",
             "chunk_index": len(chunks),
+            "total_chunks": 0,
         }
         chunks.append((current_chunk.strip(), chunk_metadata))
+
+    # Update total_chunks for all chunks
+    total = len(chunks)
+    for _, meta in chunks:
+        meta["total_chunks"] = total
 
     return chunks
 
@@ -145,7 +201,7 @@ def ingest_to_chromadb(
     use_openai_embeddings: bool = True,
 ) -> None:
     """
-    Ingest document chunks into ChromaDB.
+    Ingest document chunks into ChromaDB with enhanced metadata.
 
     Args:
         chunks: List of (content, metadata) tuples
@@ -156,7 +212,6 @@ def ingest_to_chromadb(
 
     client = chromadb.PersistentClient(
         path=str(CHROMA_PERSIST_DIR),
-        settings=Settings(anonymized_telemetry=False),
     )
 
     # Get or create collection - delete existing to refresh
@@ -179,16 +234,29 @@ def ingest_to_chromadb(
     ids = []
 
     for content, metadata in chunks:
-        doc_id = generate_doc_id(content, metadata)
+        # Convert numeric metadata to strings for ChromaDB
+        clean_metadata = {}
+        for key, value in metadata.items():
+            if isinstance(value, (int, float)):
+                clean_metadata[key] = str(value)
+            elif isinstance(value, str):
+                clean_metadata[key] = value
+            else:
+                clean_metadata[key] = str(value)
+        
         documents.append(content)
-        metadatas.append(metadata)
-        ids.append(doc_id)
+        metadatas.append(clean_metadata)
+        ids.append(clean_metadata["chunk_id"])
 
     # Generate embeddings if using OpenAI
     embeddings = None
     if use_openai_embeddings:
         try:
-            openai_client = OpenAI()
+            api_key = os.environ.get("OPENAI_API_KEY")
+            if not api_key:
+                raise ValueError("OPENAI_API_KEY not found in environment")
+            
+            openai_client = OpenAI(api_key=api_key)
             logger.info("Generating OpenAI embeddings...")
 
             # Batch embeddings (max 2048 per request)
@@ -228,11 +296,12 @@ def ingest_to_chromadb(
         )
 
     logger.info(f"Ingested {len(documents)} chunks into ChromaDB")
+    logger.info(f"Sample metadata keys: {list(metadatas[0].keys())}")
 
 
 def main():
     """Main ingestion function."""
-    logger.info("Starting document ingestion...")
+    logger.info("Starting document ingestion with enhanced metadata...")
 
     # Check if knowledge base exists
     if not KNOWLEDGE_BASE_PATH.exists():
@@ -263,7 +332,15 @@ def main():
     # Ingest to ChromaDB
     ingest_to_chromadb(all_chunks, use_openai_embeddings=use_openai)
 
-    logger.info("Ingestion complete!")
+    logger.info("Ingestion complete with enhanced metadata!")
+    logger.info("Enhanced metadata includes:")
+    logger.info("  - Identity: doc_id, chunk_id, chunk_index, total_chunks")
+    logger.info("  - Categorization: category, subcategory, content_type")
+    logger.info("  - Source: source, title, section")
+    logger.info("  - Temporal: date_start, date_end, recency_score")
+    logger.info("  - Entities: company, technologies, concepts")
+    logger.info("  - Retrieval: keywords, question_types, intent_relevance")
+    logger.info("  - Quality: has_code, has_metrics, has_architecture, detail_level")
 
 
 if __name__ == "__main__":

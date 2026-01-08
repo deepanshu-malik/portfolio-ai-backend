@@ -30,7 +30,7 @@ class HybridRetriever:
 
     # Intent-based configuration
     INTENT_CONFIG = {
-        "quick_answer": {"categories": ["profile", "skills"], "k": 3, "threshold": 0.3},
+        "quick_answer": {"categories": ["profile", "skills", "projects", "experience"], "k": 4, "threshold": 0.3},
         "project_deepdive": {"categories": ["projects"], "k": 5, "threshold": 0.25},
         "experience_deepdive": {"categories": ["experience"], "k": 5, "threshold": 0.25},
         "code_walkthrough": {"categories": ["code_snippets", "projects"], "k": 4, "threshold": 0.3},
@@ -53,10 +53,18 @@ class HybridRetriever:
             persist_dir = Path(settings.chroma_persist_directory)
             persist_dir.mkdir(parents=True, exist_ok=True)
 
-            self.chroma_client = chromadb.PersistentClient(
-                path=str(persist_dir),
-                settings=Settings(anonymized_telemetry=False),
-            )
+            # Try to reuse existing client if available
+            try:
+                self.chroma_client = chromadb.PersistentClient(
+                    path=str(persist_dir),
+                    settings=Settings(anonymized_telemetry=False),
+                )
+            except Exception:
+                # Client already exists, use HttpClient or skip
+                logger.warning("ChromaDB client already exists, using existing instance")
+                self.chroma_client = chromadb.PersistentClient(
+                    path=str(persist_dir),
+                )
 
             self.collection = self.chroma_client.get_or_create_collection(
                 name=settings.chroma_collection_name,
@@ -114,12 +122,22 @@ class HybridRetriever:
         
         Adds context based on intent.
         """
+        query_lower = query.lower()
+        
+        # For quick_answer, expand if asking about counts/lists
+        if intent == "quick_answer":
+            if any(word in query_lower for word in ["how many", "count", "number of", "list"]):
+                if "project" in query_lower:
+                    return f"{query} projects portfolio work built developed"
+                if "experience" in query_lower or "company" in query_lower or "work" in query_lower:
+                    return f"{query} experience company role position"
+            return query
+        
         expansions = {
             "project_deepdive": f"{query} project architecture implementation tech stack",
             "experience_deepdive": f"{query} role responsibilities achievements company",
             "code_walkthrough": f"{query} code implementation example snippet",
             "skill_assessment": f"{query} skills experience proficiency level",
-            "quick_answer": query,  # Keep simple for factual queries
             "general": query,
         }
         return expansions.get(intent, query)
