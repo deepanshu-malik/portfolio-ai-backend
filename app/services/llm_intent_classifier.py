@@ -14,7 +14,7 @@ INTENT_CLASSIFICATION_PROMPT = """You are an intent classifier for a portfolio c
 
 INTENTS:
 - quick_answer: Simple factual questions (contact info, years of experience, location, tech stack)
-- project_deepdive: Wants details about a specific project
+- project_deepdive: Wants details about a specific project OR follow-up questions about projects (e.g., "tell me about them" after mentioning projects)
 - experience_deepdive: Wants details about work experience at a company
 - code_walkthrough: Wants to see code or implementation details
 - skill_assessment: Evaluating fit for a role or assessing skills
@@ -25,6 +25,10 @@ INTENTS:
 CONTEXT:
 - Current section user is viewing: {current_section}
 - Previous topic discussed: {previous_topic}
+
+IMPORTANT: Consider the previous topic when classifying follow-up questions.
+- If previous_topic is about projects and user says "tell me more" or "tell me about them", classify as project_deepdive
+- If previous_topic is about experience and user asks follow-up, classify as experience_deepdive
 
 USER MESSAGE: {message}
 

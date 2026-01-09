@@ -5,6 +5,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
+from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 
 from app.services.langchain import ConversationalChain
@@ -37,8 +38,25 @@ class ChatResponse(BaseModel):
 async def chat_v2(request: ChatRequest):
     """LangChain-powered chat endpoint."""
     try:
-        # Classify intent
-        intent = await intent_classifier.classify(request.message)
+        # Get previous topic from conversation history
+        history = chain._get_history(request.session_id)
+        previous_topic = None
+        if history:
+            for msg in reversed(history[-4:]):
+                if isinstance(msg, HumanMessage):
+                    content_lower = msg.content.lower()
+                    if "project" in content_lower:
+                        previous_topic = "project_deepdive"
+                        break
+                    elif "experience" in content_lower or "work" in content_lower:
+                        previous_topic = "experience_deepdive"
+                        break
+        
+        # Classify intent with context
+        intent = await intent_classifier.classify(
+            request.message,
+            context={"previous_topic": previous_topic}
+        )
         
         # Generate response
         result = await chain.invoke(
@@ -69,7 +87,25 @@ async def chat_v2(request: ChatRequest):
 @router.post("/stream")
 async def chat_stream_v2(request: ChatRequest):
     """Streaming LangChain chat endpoint."""
-    intent = await intent_classifier.classify(request.message)
+    # Get previous topic from conversation history
+    history = chain._get_history(request.session_id)
+    previous_topic = None
+    if history:
+        # Check last few messages for context
+        for msg in reversed(history[-4:]):
+            if isinstance(msg, HumanMessage):
+                content_lower = msg.content.lower()
+                if "project" in content_lower:
+                    previous_topic = "project_deepdive"
+                    break
+                elif "experience" in content_lower or "work" in content_lower:
+                    previous_topic = "experience_deepdive"
+                    break
+    
+    intent = await intent_classifier.classify(
+        request.message,
+        context={"previous_topic": previous_topic}
+    )
     
     async def generate():
         async for chunk in chain.stream(

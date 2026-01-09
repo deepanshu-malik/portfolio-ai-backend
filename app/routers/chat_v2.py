@@ -56,18 +56,22 @@ async def chat(request: Request, chat_request: ChatRequest) -> ChatResponse:
         # Get session history
         session = session_manager.get_session(session_id)
         history = session.get("history", [])
+        
+        # Use session's current_topic as previous_topic if not provided by client
+        previous_topic = (context.previous_topic if context and context.previous_topic 
+                         else session.get("current_topic"))
 
         # 1. LLM-based intent classification
         intent = await intent_classifier.classify(
             message=message,
             context={
                 "current_section": context.current_section if context else None,
-                "previous_topic": context.previous_topic if context else None,
+                "previous_topic": previous_topic,
                 "history": history,
             },
             session_id=session_id,
         )
-        logger.info(f"Classified intent: {intent}")
+        logger.info(f"Classified intent: {intent} (previous_topic: {previous_topic})")
 
         # 2. Hybrid retrieval with reranking
         retriever = get_retriever(request)
@@ -143,13 +147,17 @@ async def chat_stream(request: Request, chat_request: ChatRequest):
         # Get session history
         session = session_manager.get_session(session_id)
         history = session.get("history", [])
+        
+        # Use session's current_topic as previous_topic if not provided by client
+        previous_topic = (context.previous_topic if context and context.previous_topic 
+                         else session.get("current_topic"))
 
         # Classify intent
         intent = await intent_classifier.classify(
             message=message,
             context={
                 "current_section": context.current_section if context else None,
-                "previous_topic": context.previous_topic if context else None,
+                "previous_topic": previous_topic,
             },
             session_id=session_id,
         )
