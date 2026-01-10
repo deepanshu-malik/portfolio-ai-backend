@@ -321,3 +321,7 @@ Example: 2,0,1,3"""
             }
         except Exception as e:
             return {"status": "error", "error": str(e)}
+
+
+# Global singleton instance for easy import
+retriever = HybridRetriever()
