@@ -1,0 +1,115 @@
+# Koyeb Deployment Configuration
+# Portfolio AI Backend - Optimized for Free Tier
+# https://www.koyeb.com/docs/reference/koyeb-app-configuration-file
+
+name: portfolio-ai-backend
+
+services:
+  - name: api
+    type: web
+
+    # Free tier instance type (512MB RAM, 0.1 vCPU)
+    instance_type: nano
+
+    # Region - Choose closest to your users
+    # Options: fra (Frankfurt), was (Washington), sin (Singapore)
+    regions:
+      - fra
+
+    # Docker build configuration
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Build args for ChromaDB ingestion at build time
+      args:
+        OPENAI_API_KEY: $OPENAI_API_KEY
+
+    # Port configuration
+    ports:
+      - port: 8000
+        protocol: http
+
+    # Routing configuration
+    routes:
+      - path: /
+        port: 8000
+
+    # Environment variables
+    env:
+      # Application settings
+      - key: APP_ENV
+        value: production
+
+      - key: DEBUG
+        value: "false"
+
+      # OpenAI API key (set as secret in Koyeb dashboard)
+      - key: OPENAI_API_KEY
+        secret: openai-api-key
+
+      # OpenAI models
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
+
+      - key: OPENAI_EMBEDDING_MODEL
+        value: text-embedding-3-small
+
+      # CORS origins (update with your frontend domain)
+      - key: ALLOWED_ORIGINS
+        value: "https://deepanshu-malik.github.io,http://localhost:3000"
+
+      # ChromaDB configuration
+      - key: CHROMA_PERSIST_DIRECTORY
+        value: "./chromadb"
+
+      - key: CHROMA_COLLECTION_NAME
+        value: portfolio
+
+      # Rate limiting (lower for free tier)
+      - key: RATE_LIMIT_REQUESTS
+        value: "5"
+
+      - key: RATE_LIMIT_WINDOW
+        value: "60"
+
+      # Memory optimization
+      - key: MAX_CONCURRENT_REQUESTS
+        value: "3"
+
+      - key: REQUEST_TIMEOUT
+        value: "30"
+
+      - key: MAX_HISTORY_LENGTH
+        value: "5"
+
+    # Health check configuration
+    health_checks:
+      - path: /api/health
+        port: 8000
+        protocol: http
+        interval: 60s  # Check every 60 seconds
+        timeout: 5s    # Timeout after 5 seconds
+        grace_period: 30s  # Wait 30s after start before first check
+        restart_limit: 3  # Restart after 3 failed checks
+
+    # Scaling configuration (free tier = single instance)
+    scaling:
+      min: 1
+      max: 1
+      # Free tier doesn't support autoscaling
+
+    # Resource limits (automatically set by instance_type)
+    # nano instance: 512MB RAM, 0.1 vCPU, 2GB disk
+
+# Secrets (set these in Koyeb dashboard)
+# 1. Go to Settings > Secrets
+# 2. Create secret named "openai-api-key"
+# 3. Set value to your OpenAI API key
+
+# Deployment notes:
+# 1. Create a Koyeb account at https://app.koyeb.com
+# 2. Connect your GitHub repository
+# 3. Set up the openai-api-key secret
+# 4. Deploy from main branch
+# 5. Configure custom domain if needed
+# 6. Set up keep-alive ping at https://cron-job.org to hit /api/ping every 14 minutes

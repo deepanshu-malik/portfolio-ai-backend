@@ -21,6 +21,8 @@ httpx
 
 # Utilities
 python-dotenv
+tenacity  # Retry logic with exponential backoff
+psutil  # System and memory monitoring
 
 # Markdown & Code
 markdown

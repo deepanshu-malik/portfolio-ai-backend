@@ -38,11 +38,20 @@ RUN mkdir -p chromadb && chown -R appuser:appuser chromadb
 # Switch to non-root user
 USER appuser
 
-# Run document ingestion (requires OPENAI_API_KEY at build time for embeddings)
-# If no API key, ChromaDB will use default embeddings
+# Run document ingestion at BUILD time to bake data into image
+# This ensures ChromaDB data persists across deployments
 ARG OPENAI_API_KEY=""
 ENV OPENAI_API_KEY=${OPENAI_API_KEY}
-RUN python scripts/ingest.py || echo "Ingestion skipped (no API key or error)"
+
+# Run ingestion - data will be part of the image
+RUN python scripts/ingest.py && \
+    echo "ChromaDB ingestion completed successfully" || \
+    echo "WARNING: Ingestion failed - will retry at runtime"
+
+# Verify ingestion succeeded by checking ChromaDB directory
+RUN test -f chromadb/chroma.sqlite3 && \
+    echo "ChromaDB database file found - ingestion verified" || \
+    echo "WARNING: ChromaDB database file not found"
 
 # Expose port
 EXPOSE 8000

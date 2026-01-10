@@ -41,6 +41,22 @@ class Settings(BaseSettings):
     rate_limit_requests: int = 10
     rate_limit_window: int = 60
 
+    # Memory Optimization (for Koyeb free tier - 512MB RAM)
+    max_concurrent_requests: int = 3  # Limit concurrent processing
+    request_timeout: int = 30  # Request timeout in seconds
+    max_history_length: int = 5  # Conversation history length (reduced from 10)
+
+    # Response Caching
+    cache_ttl: int = 1800  # Cache TTL in seconds (30 minutes)
+    cache_max_size: int = 100  # Maximum cached responses
+    cache_enabled: bool = True  # Enable/disable caching
+
+    # Token Usage Optimization (reduced for free tier cost savings)
+    max_tokens_context: int = 2000  # Context tokens (reduced from 3000)
+    max_tokens_history: int = 500   # History tokens (reduced from 1000)
+    max_tokens_response: int = 600  # Response tokens (reduced from 800)
+    max_retrieval_docs: int = 3     # Retrieved documents (reduced from 5)
+
     @property
     def cors_origins(self) -> List[str]:
         """Parse CORS origins from comma-separated string."""

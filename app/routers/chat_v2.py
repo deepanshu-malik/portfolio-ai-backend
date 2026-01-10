@@ -6,12 +6,14 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
+from app.config import settings
 from app.models import ChatRequest, ChatResponse
 from app.services.llm_intent_classifier import LLMIntentClassifier
 from app.services.hybrid_retriever import HybridRetriever
 from app.services.advanced_response_generator import AdvancedResponseGenerator
 from app.services.session_manager import SessionManager
 from app.services.token_tracker import token_tracker
+from app.services.cache import response_cache
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +75,28 @@ async def chat(request: Request, chat_request: ChatRequest) -> ChatResponse:
         )
         logger.info(f"Classified intent: {intent} (previous_topic: {previous_topic})")
 
+        # 1.5. Check cache for existing response (if enabled)
+        if settings.cache_enabled:
+            cached_response = response_cache.get(message, intent)
+            if cached_response:
+                logger.info(f"Cache HIT - returning cached response for session {session_id}")
+                # Update session with cached response
+                session_manager.update_session(
+                    session_id=session_id,
+                    message=message,
+                    response=cached_response["response"],
+                    intent=intent,
+                )
+                return ChatResponse(
+                    response=cached_response["response"],
+                    suggestions=cached_response.get("suggestions", []),
+                    detail_panel=cached_response.get("detail_panel"),
+                    intent=intent,
+                    session_id=session_id,
+                    sources=cached_response.get("sources", []),
+                    cached=True,
+                )
+
         # 2. Hybrid retrieval with reranking
         retriever = get_retriever(request)
         retrieved_docs = []
@@ -108,10 +132,21 @@ async def chat(request: Request, chat_request: ChatRequest) -> ChatResponse:
             intent=intent,
         )
 
+        # 5. Cache the response (if enabled and no error)
+        if settings.cache_enabled and not response_data.get("error"):
+            cache_data = {
+                "response": response_data["response"],
+                "suggestions": response_data.get("suggestions", []),
+                "detail_panel": response_data.get("detail_panel"),
+                "sources": sources,
+            }
+            response_cache.set(message, cache_data, intent)
+            logger.debug(f"Response cached for message: {message[:50]}...")
+
         # Log token usage
         if "token_usage" in response_data:
             logger.info(f"Token usage: {response_data['token_usage']}")
-        
+
         logger.info(f"Response data keys: {response_data.keys()}")
         logger.info(f"Suggestions: {response_data.get('suggestions')}")
 
@@ -217,10 +252,46 @@ async def chat_stream(request: Request, chat_request: ChatRequest):
 async def get_chat_stats(session_id: Optional[str] = None):
     """
     Get token usage and cost statistics.
-    
+
     Args:
         session_id: Optional session ID for session-specific stats
     """
     if session_id:
         return token_tracker.get_session_stats(session_id)
     return token_tracker.get_total_stats()
+
+
+@router.get("/chat/cache/stats")
+async def get_cache_stats():
+    """
+    Get response cache statistics.
+
+    Returns cache hit rate, size, and other metrics.
+    Useful for monitoring cache effectiveness and cost savings.
+    """
+    stats = response_cache.get_stats()
+
+    # Add estimated cost savings
+    # Assuming average response costs ~$0.001 per request
+    estimated_savings = stats["hits"] * 0.001
+    stats["estimated_cost_savings_usd"] = round(estimated_savings, 4)
+
+    return {
+        "cache_enabled": settings.cache_enabled,
+        "stats": stats,
+        "message": f"Cache is saving ~{stats['hit_rate_percent']}% of OpenAI API calls",
+    }
+
+
+@router.post("/chat/cache/clear")
+async def clear_cache():
+    """
+    Clear all cached responses.
+
+    Useful for debugging or forcing fresh responses.
+    """
+    response_cache.clear()
+    return {
+        "status": "success",
+        "message": "Response cache cleared",
+    }

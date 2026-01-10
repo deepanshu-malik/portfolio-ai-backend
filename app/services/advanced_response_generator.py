@@ -6,6 +6,13 @@ import tiktoken
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from openai import AsyncOpenAI, APIError, RateLimitError, APIConnectionError
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+    before_sleep_log,
+)
 
 from app.config import settings
 from app.models import Suggestion
@@ -15,13 +22,15 @@ from app.services.token_tracker import token_tracker
 
 logger = logging.getLogger(__name__)
 
-MAX_RETRIES = 3
-RETRY_DELAYS = [1, 2, 4]
+# Reduced retries for free tier to save costs and time
+MAX_RETRIES = 2
+RETRY_DELAYS = [2, 4]
 
-# Token limits
-MAX_CONTEXT_TOKENS = 3000
-MAX_HISTORY_TOKENS = 1000
-MAX_RESPONSE_TOKENS = 800
+# Token limits (configurable via settings for Koyeb free tier optimization)
+# These defaults will be overridden by config values
+MAX_CONTEXT_TOKENS = 2000  # Reduced for cost savings
+MAX_HISTORY_TOKENS = 500   # Reduced for cost savings
+MAX_RESPONSE_TOKENS = 600  # Reduced for cost savings
 
 
 class AdvancedResponseGenerator:
@@ -42,6 +51,11 @@ class AdvancedResponseGenerator:
         self.model = settings.openai_model
         self.encoding = tiktoken.encoding_for_model("gpt-4o-mini")
 
+        # Use configurable token limits for Koyeb optimization
+        self.max_context_tokens = settings.max_tokens_context
+        self.max_history_tokens = settings.max_tokens_history
+        self.max_response_tokens = settings.max_tokens_response
+
     def count_tokens(self, text: str) -> int:
         """Count tokens in text."""
         return len(self.encoding.encode(text))
@@ -57,15 +71,19 @@ class AdvancedResponseGenerator:
     def _prepare_context(
         self,
         retrieved_docs: List[Dict[str, Any]],
-        max_tokens: int = MAX_CONTEXT_TOKENS,
+        max_tokens: int = None,
     ) -> str:
         """
         Prepare context from retrieved docs with token management.
-        
+
         Prioritizes higher-scored documents.
         """
         if not retrieved_docs:
             return ""
+
+        # Use instance token limit if not specified
+        if max_tokens is None:
+            max_tokens = self.max_context_tokens
 
         # Sort by score (hybrid_score or semantic_score)
         sorted_docs = sorted(
@@ -106,15 +124,19 @@ class AdvancedResponseGenerator:
     def _prepare_history(
         self,
         history: List[Dict[str, str]],
-        max_tokens: int = MAX_HISTORY_TOKENS,
+        max_tokens: int = None,
     ) -> List[Dict[str, str]]:
         """
         Prepare conversation history with token management.
-        
+
         Keeps most recent exchanges that fit within limit.
         """
         if not history:
             return []
+
+        # Use instance token limit if not specified
+        if max_tokens is None:
+            max_tokens = self.max_history_tokens
 
         # Start from most recent
         prepared = []
@@ -216,39 +238,58 @@ class AdvancedResponseGenerator:
                 },
             }
 
+        except (RateLimitError, APIError, APIConnectionError) as e:
+            logger.error(f"OpenAI API error after retries: {e}", exc_info=True)
+            return {
+                "response": "I'm experiencing connectivity issues with my AI service. Please try again in a moment. If the problem persists, the service may be experiencing high demand.",
+                "suggestions": [],
+                "detail_panel": None,
+                "error": True,
+                "error_type": "api_error",
+            }
         except Exception as e:
             logger.error(f"Response generation error: {e}", exc_info=True)
             return {
-                "response": "I apologize, but I encountered an error. Please try again.",
+                "response": "I apologize, but I encountered an unexpected error. Please try again or rephrase your question.",
                 "suggestions": [],
                 "detail_panel": None,
+                "error": True,
+                "error_type": "unknown_error",
             }
 
+    @retry(
+        stop=stop_after_attempt(MAX_RETRIES),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type((RateLimitError, APIError, APIConnectionError)),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
     async def _generate_response(self, messages: List[Dict]) -> tuple[str, int]:
-        """Generate response with retry logic."""
-        last_error = None
+        """
+        Generate response with exponential backoff retry logic.
 
-        for attempt in range(MAX_RETRIES):
-            try:
-                response = await self.client.chat.completions.create(
-                    model=self.model,
-                    messages=messages,
-                    temperature=0.7,
-                    max_tokens=MAX_RESPONSE_TOKENS,
-                )
-                
-                content = response.choices[0].message.content
-                output_tokens = response.usage.completion_tokens
-                
-                return content, output_tokens
+        Uses tenacity for robust retry handling with exponential backoff.
+        Retries on OpenAI API errors, rate limits, and connection issues.
+        """
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=0.7,
+                max_tokens=self.max_response_tokens,
+            )
 
-            except (RateLimitError, APIError, APIConnectionError) as e:
-                last_error = e
-                delay = RETRY_DELAYS[min(attempt, len(RETRY_DELAYS) - 1)]
-                logger.warning(f"API error, retrying in {delay}s: {e}")
-                await asyncio.sleep(delay)
+            content = response.choices[0].message.content
+            output_tokens = response.usage.completion_tokens
 
-        raise last_error
+            return content, output_tokens
+
+        except (RateLimitError, APIError, APIConnectionError) as e:
+            logger.error(f"OpenAI API error: {e}")
+            raise  # Let tenacity handle the retry
+        except Exception as e:
+            logger.error(f"Unexpected error in response generation: {e}", exc_info=True)
+            raise
 
     async def _stream_response(
         self,
@@ -261,7 +302,7 @@ class AdvancedResponseGenerator:
                 model=self.model,
                 messages=messages,
                 temperature=0.7,
-                max_tokens=MAX_RESPONSE_TOKENS,
+                max_tokens=self.max_response_tokens,
                 stream=True,
             )
 
@@ -325,7 +366,7 @@ class AdvancedResponseGenerator:
                 model=self.model,
                 messages=messages,
                 temperature=0.7,
-                max_tokens=MAX_RESPONSE_TOKENS,
+                max_tokens=self.max_response_tokens,
                 stream=True,
             )
 

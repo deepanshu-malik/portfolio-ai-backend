@@ -28,16 +28,16 @@ class HybridRetriever:
     - Consistent OpenAI embeddings
     """
 
-    # Intent-based configuration
+    # Intent-based configuration (optimized for Koyeb free tier - reduced k values)
     INTENT_CONFIG = {
-        "quick_answer": {"categories": ["profile", "skills", "projects", "experience"], "k": 4, "threshold": 0.3},
-        "project_deepdive": {"categories": ["projects"], "k": 5, "threshold": 0.25},
-        "experience_deepdive": {"categories": ["experience"], "k": 5, "threshold": 0.25},
-        "code_walkthrough": {"categories": ["code_snippets", "projects"], "k": 4, "threshold": 0.3},
-        "skill_assessment": {"categories": ["skills", "assessments"], "k": 5, "threshold": 0.25},
-        "comparison": {"categories": ["projects", "experience", "skills"], "k": 6, "threshold": 0.3},
-        "tour": {"categories": ["profile", "skills", "projects", "experience"], "k": 4, "threshold": 0.35},
-        "general": {"categories": None, "k": 4, "threshold": 0.35},
+        "quick_answer": {"categories": ["profile", "skills", "projects", "experience"], "k": 3, "threshold": 0.3},
+        "project_deepdive": {"categories": ["projects"], "k": 3, "threshold": 0.25},
+        "experience_deepdive": {"categories": ["experience"], "k": 3, "threshold": 0.25},
+        "code_walkthrough": {"categories": ["code_snippets", "projects"], "k": 3, "threshold": 0.3},
+        "skill_assessment": {"categories": ["skills", "assessments"], "k": 3, "threshold": 0.25},
+        "comparison": {"categories": ["projects", "experience", "skills"], "k": 4, "threshold": 0.3},
+        "tour": {"categories": ["profile", "skills", "projects", "experience"], "k": 3, "threshold": 0.35},
+        "general": {"categories": None, "k": 3, "threshold": 0.35},
     }
 
     def __init__(self):

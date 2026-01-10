@@ -4,6 +4,8 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
+from app.config import settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -13,17 +15,17 @@ class SessionManager:
 
     Features:
     - In-memory session storage
-    - Conversation history (last 10 exchanges)
+    - Conversation history (configurable length, default 5 for memory optimization)
     - Session expiration (1 hour)
     - Topic tracking
     """
 
-    MAX_HISTORY_LENGTH = 10
     SESSION_EXPIRY_HOURS = 1
 
-    def __init__(self):
+    def __init__(self, max_history_length: int = None):
         """Initialize the session manager."""
         self.sessions: Dict[str, Dict[str, Any]] = {}
+        self.max_history_length = max_history_length or settings.max_history_length
 
     def get_session(self, session_id: str) -> Dict[str, Any]:
         """
@@ -82,8 +84,8 @@ class SessionManager:
         )
 
         # Trim history to max length
-        if len(session["history"]) > self.MAX_HISTORY_LENGTH:
-            session["history"] = session["history"][-self.MAX_HISTORY_LENGTH :]
+        if len(session["history"]) > self.max_history_length:
+            session["history"] = session["history"][-self.max_history_length :]
 
         # Update current topic
         if intent and intent != "general":
